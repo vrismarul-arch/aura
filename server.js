@@ -18,47 +18,36 @@ import { ensureDefaultCategories } from "./utils/defaultCategories.js";
 const app = express();
 
 /* =========================================================
-   TRUST PROXY
-   Render sits behind a proxy. Without this,
-   express-rate-limit can't read the real client IP.
-========================================================= */
-
-app.set("trust proxy", 1);
-
-/* =========================================================
    CORS
-   CLIENT_URL = comma-separated list of allowed origins
-   e.g. http://localhost:5173,https://your-frontend.com
 ========================================================= */
 
-const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(",").map((s) =>
-      s.trim().replace(/\/+$/, "")
-    )
-  : ["http://localhost:5173"];
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://aurakraftie.netlify.app",
+];
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow non-browser tools (Postman, curl, server-to-server)
-    if (!origin) {
-      return callback(null, true);
-    }
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
 
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-    // Don't throw: a thrown error becomes a 500 with no CORS headers
-    console.warn("⚠️ CORS blocked for origin:", origin);
-    return callback(null, false);
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-};
+      console.error(`❌ CORS blocked for origin: ${origin}`);
 
-// Global cors middleware also answers OPTIONS preflight requests
-app.use(cors(corsOptions));
+      return callback(
+        new Error(`CORS blocked for origin: ${origin}`),
+        false
+      );
+    },
+    credentials: true,
+  })
+);
 
 /* =========================================================
    SECURITY & MIDDLEWARE
@@ -67,6 +56,7 @@ app.use(cors(corsOptions));
 app.use(helmet());
 
 app.use(express.json({ limit: "1mb" }));
+
 app.use(morgan("dev"));
 
 /* =========================================================
@@ -143,7 +133,7 @@ connectDB()
   .then(ensureDefaultCategories)
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`🚀 API running on port ${PORT}`);
+      console.log(`🚀 API running on http://localhost:${PORT}`);
       console.log("🌐 Allowed origins:", allowedOrigins);
     });
   })
