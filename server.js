@@ -18,24 +18,46 @@ import { ensureDefaultCategories } from "./utils/defaultCategories.js";
 const app = express();
 
 /* =========================================================
+   CORS
+========================================================= */
+
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(",").map((s) => s.trim())
+  : ["http://localhost:5173"];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(
+        new Error(`CORS blocked for origin: ${origin}`),
+        false
+      );
+    },
+    credentials: true,
+  })
+);
+
+/* =========================================================
    SECURITY & MIDDLEWARE
 ========================================================= */
 
 app.use(helmet());
 
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL
-      ? process.env.CLIENT_URL.split(",").map((s) => s.trim())
-      : "*",
-    credentials: true,
-  })
-);
-
 app.use(express.json({ limit: "1mb" }));
 app.use(morgan("dev"));
 
-/* Brute-force protection on login/register */
+/* =========================================================
+   RATE LIMIT
+========================================================= */
+
 app.use(
   "/api/auth",
   rateLimit({
@@ -50,9 +72,12 @@ app.use(
    HEALTH CHECK
 ========================================================= */
 
-app.get("/", (_req, res) =>
-  res.json({ ok: true, name: "Jewellery API" })
-);
+app.get("/", (_req, res) => {
+  res.json({
+    ok: true,
+    name: "Jewellery API",
+  });
+});
 
 /* =========================================================
    ROUTES
@@ -62,20 +87,20 @@ app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/me", userRoutes);
-
-/* ✅ Orders router (includes public booking + admin actions + delivery update) */
 app.use("/api/orders", orderRoutes);
 
 /* =========================================================
-   404 HANDLER
+   404
 ========================================================= */
 
-app.use((_req, res) =>
-  res.status(404).json({ message: "Route not found" })
-);
+app.use((_req, res) => {
+  res.status(404).json({
+    message: "Route not found",
+  });
+});
 
 /* =========================================================
-   CENTRAL ERROR HANDLER
+   ERROR HANDLER
 ========================================================= */
 
 app.use((err, _req, res, _next) => {
@@ -100,12 +125,13 @@ app.use((err, _req, res, _next) => {
 const PORT = process.env.PORT || 5000;
 
 connectDB()
-  .then(ensureDefaultCategories) // creates default categories only if none exist
-  .then(() =>
-    app.listen(PORT, () =>
-      console.log(`🚀 API running on http://localhost:${PORT}`)
-    )
-  )
+  .then(ensureDefaultCategories)
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 API running on http://localhost:${PORT}`);
+      console.log("🌐 Allowed origins:", allowedOrigins);
+    });
+  })
   .catch((err) => {
     console.error("❌ Startup failed:", err.message);
     process.exit(1);
