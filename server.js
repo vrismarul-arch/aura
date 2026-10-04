@@ -18,32 +18,47 @@ import { ensureDefaultCategories } from "./utils/defaultCategories.js";
 const app = express();
 
 /* =========================================================
+   TRUST PROXY
+   Render sits behind a proxy. Without this,
+   express-rate-limit can't read the real client IP.
+========================================================= */
+
+app.set("trust proxy", 1);
+
+/* =========================================================
    CORS
+   CLIENT_URL = comma-separated list of allowed origins
+   e.g. http://localhost:5173,https://your-frontend.com
 ========================================================= */
 
 const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(",").map((s) => s.trim())
+  ? process.env.CLIENT_URL.split(",").map((s) =>
+      s.trim().replace(/\/+$/, "")
+    )
   : ["http://localhost:5173"];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) {
-        return callback(null, true);
-      }
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser tools (Postman, curl, server-to-server)
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-      return callback(
-        new Error(`CORS blocked for origin: ${origin}`),
-        false
-      );
-    },
-    credentials: true,
-  })
-);
+    // Don't throw: a thrown error becomes a 500 with no CORS headers
+    console.warn("⚠️ CORS blocked for origin:", origin);
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+// Global cors middleware also answers OPTIONS preflight requests
+app.use(cors(corsOptions));
 
 /* =========================================================
    SECURITY & MIDDLEWARE
@@ -128,7 +143,7 @@ connectDB()
   .then(ensureDefaultCategories)
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`🚀 API running on http://localhost:${PORT}`);
+      console.log(`🚀 API running on port ${PORT}`);
       console.log("🌐 Allowed origins:", allowedOrigins);
     });
   })
